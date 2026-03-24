@@ -1,85 +1,19 @@
-FROM ubuntu:24.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    qemu-system-x86 \
-    qemu-utils \
-    cloud-image-utils \
-    novnc \
-    websockify \
-    wget \
-    unzip \
-    net-tools \
-    openssh-client \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create working directories
-RUN mkdir -p /data /seed /novnc
-
-# Download Ubuntu Cloud Image
-RUN wget -q https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img -O /data/ubuntu.img
-
-# Cloud-init user-data to set root password and allow login
-RUN bash -c 'cat > /seed/user-data' <<EOF
-#cloud-config
-users:
-  - name: root
-    plain_text_passwd: "root"
-    lock_passwd: false
-    shell: /bin/bash
-    sudo: ALL=(ALL) NOPASSWD:ALL
-
-ssh_pwauth: true
-disable_root: false
-chpasswd:
-  expire: false
-EOF
-
-# Required metadata file (can be empty)
-RUN touch /seed/meta-data
-
-# Create the seed image used by cloud-init
-RUN cloud-localds /data/seed.img /seed/user-data /seed/meta-data
-
-# Setup noVNC
-RUN wget https://github.com/novnc/noVNC/archive/refs/heads/master.zip -O /tmp/novnc.zip && \
-    unzip /tmp/novnc.zip -d /tmp && \
-    mv /tmp/noVNC-master/* /novnc && \
-    rm -rf /tmp/novnc.zip /tmp/noVNC-master
-
-# Startup script
-RUN echo '#!/bin/bash\n\
-set -e\n\
-\n\
-echo "Starting Ubuntu VM..."\n\
-\n\
-qemu-system-x86_64 \\\n\
-  -m 2048 \\\n\
-  -smp 2 \\\n\
-  -vga virtio \\\n\
-  -drive file=/data/ubuntu.img,format=qcow2,if=virtio \\\n\
-  -drive file=/data/seed.img,format=raw,if=virtio \\\n\
-  -netdev user,id=net0,hostfwd=tcp::2222-:22 \\\n\
-  -device virtio-net,netdev=net0 \\\n\
-  -nographic \\\n\
-  -serial mon:stdio \\\n\
-  -vnc :0 &\n\
-\n\
-sleep 5\n\
-websockify --web /novnc 6080 localhost:5900 &\n\
-\n\
-echo "================================================"\n\
-echo " ✅ VM running — Login with user: root / pass: root"\n\
-echo " 🌐 Access VNC at http://localhost:6080"\n\
-echo " 🔐 SSH via: ssh root@localhost -p 2222"\n\
-echo "================================================"\n\
-tail -f /dev/null\n' > /start.sh && chmod +x /start.sh
-
-# Persistent volume
-VOLUME /data
-
-EXPOSE 6080 2222
-
-CMD ["/start.sh"]
+FROM debian
+RUN dpkg --add-architecture i386
+RUN apt update
+RUN DEBIAN_FRONTEND=noninteractive apt install wine qemu-kvm *zenhei* xz-utils dbus-x11 curl firefox-esr gnome-system-monitor mate-system-monitor  git xfce4 xfce4-terminal tightvncserver wget   -y
+RUN wget https://github.com/novnc/noVNC/archive/refs/tags/v1.2.0.tar.gz
+RUN tar -xvf v1.2.0.tar.gz
+RUN mkdir  $HOME/.vnc
+RUN echo 'hypercloud' | vncpasswd -f > $HOME/.vnc/passwd
+RUN echo '/bin/env  MOZ_FAKE_NO_SANDBOX=1  dbus-launch xfce4-session'  > $HOME/.vnc/xstartup
+RUN chmod 600 $HOME/.vnc/passwd
+RUN chmod 755 $HOME/.vnc/xstartup
+RUN echo 'whoami ' >>/luo.sh
+RUN echo 'cd ' >>/luo.sh
+RUN echo "su -l -c 'vncserver :2000 -geometry 1360x768' "  >>/luo.sh
+RUN echo 'cd /noVNC-1.2.0' >>/luo.sh
+RUN echo './utils/launch.sh  --vnc localhost:7900 --listen 8900 ' >>/luo.sh
+RUN chmod 755 /luo.sh
+EXPOSE 8900
+CMD  /luo.sh
